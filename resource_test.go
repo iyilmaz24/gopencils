@@ -230,6 +230,25 @@ func TestDoNotDecodeBodyOnErr(t *testing.T) {
 	}
 }
 
+
+func TestDoNotDecodeBodyOnNoContent(t *testing.T) {
+
+	api := Api(testSrv.URL)
+
+	testMux.HandleFunc("/no-content",
+		func(rw http.ResponseWriter, req *http.Request) {
+			rw.WriteHeader(http.StatusNoContent)
+		})
+
+	resp := make(map[string]interface{})
+	r, err := api.Id("no-content", &resp).Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t, http.StatusNoContent, r.Raw.StatusCode )
+}
+
 func readJson(path string) string {
 	buf, err := ioutil.ReadFile(path)
 	if err != nil {

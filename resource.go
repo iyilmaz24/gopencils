@@ -257,6 +257,10 @@ func (r *Resource) do(method string) (*Resource, error) {
 		r.SetHeader(k, r.Raw.Header.Get(k))
 	}
 
+	if resp.StatusCode == http.StatusNoContent {
+		return r, nil
+	}
+
 	err = json.NewDecoder(resp.Body).Decode(r.Response)
 	if err != nil {
 		return r, err
