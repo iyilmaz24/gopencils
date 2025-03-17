@@ -1,4 +1,4 @@
-module github.com/kovetskiy/gopencils
+module github.com/iyilmaz24/gopencils
 
 go 1.20
 
