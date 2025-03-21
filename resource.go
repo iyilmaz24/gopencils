@@ -243,8 +243,13 @@ func (r *Resource) do(method string) (*Resource, error) {
 		req.Body = io.NopCloser(bytes.NewReader(requestBody)) // restore req.Body after reading + saving it above
 		req.ContentLength = int64(len(requestBody))
 	}
+	if r.Headers == nil {
+		r.Headers = make(http.Header)
+	}
+	r.Headers.Set("X-Total-Retries", strconv.Itoa(0))
 
 	resp, err := r.Api.Client.Do(req)
+	totalRetries := 0
 
 	if err != nil {
 		for i := 0; i < r.Api.RetryCount; i++ {
@@ -256,11 +261,13 @@ func (r *Resource) do(method string) (*Resource, error) {
 				req.ContentLength = int64(len(requestBody))
 			}
 			resp, err = r.Api.Client.Do(req)
-
-			if err == nil {
+			totalRetries++
+			
+			if err == nil && (resp == nil || resp.StatusCode < 500) {
 				break
 			}
 		}
+		r.Headers.Set("X-Total-Retries", strconv.Itoa(totalRetries))
 		if err != nil {
 			return r, err
 		}
@@ -278,7 +285,7 @@ func (r *Resource) do(method string) (*Resource, error) {
 			r.Logger.Printf("%s", string(dump))
 		}
 	}
-
+	
 	if resp.StatusCode >= 400 {
 		return r, nil
 	}
@@ -309,7 +316,7 @@ func (r *Resource) SetPayload(args interface{}) io.Reader {
 
 // Sets Headers
 func (r *Resource) SetHeader(key string, value string) {
-	r.Headers.Add(key, value)
+    r.Headers.Add(key, value)
 }
 
 // Overwrites the client that will be used for requests.
