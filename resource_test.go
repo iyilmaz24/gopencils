@@ -2,6 +2,7 @@ package gopencils
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -220,7 +221,7 @@ func TestDoNotDecodeBodyOnErr(t *testing.T) {
 		assert.Equal(t, map[string]interface{}{}, resp,
 			fmt.Sprintf("response should be unparsed: %d", code))
 
-		respData, err := ioutil.ReadAll(r.Raw.Body)
+		respData, err := io.ReadAll(r.Raw.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
