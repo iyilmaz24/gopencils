@@ -5,9 +5,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	toxiproxy "github.com/Shopify/toxiproxy/v2/client"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -256,4 +260,68 @@ func readJson(path string) string {
 	}
 
 	return string(buf)
+}
+
+func TestRetrialLogicWithToxiproxy(t *testing.T) {
+
+	proxyClient := toxiproxy.NewClient("http://127.0.0.1:8474")
+	_, err := proxyClient.Version()
+
+    if err != nil {
+        cmd := exec.Command("toxiproxy-server", "-host", "127.0.0.1", "-port", "8474")
+        if err := cmd.Start(); err != nil {
+            t.Fatalf("Failed to start Toxiproxy server: %v", err)
+        }
+        defer cmd.Process.Kill() // kill process when test is done
+        
+        time.Sleep(1 * time.Second) // wait for the server to start
+        proxyClient = toxiproxy.NewClient("http://127.0.0.1:8474")
+    }
+    
+    proxyName := "api_proxy"
+    existingProxy, err := proxyClient.Proxy(proxyName)
+    if err == nil && existingProxy != nil {
+        if err := existingProxy.Delete(); err != nil {
+            t.Fatalf("Failed to delete existing proxy: %v", err)
+        }
+    }
+
+	proxy, err := proxyClient.CreateProxy("api_proxy", "127.0.0.1:8080", "httpbin.org:80") 
+	if err != nil {
+		t.Fatalf("Failed to create proxy: %v", err)
+	}
+
+	_, err = proxy.AddToxic("high_latency", "latency", "downstream", 1.0, map[string]interface{}{
+		"latency": 1000,
+	})
+	if err != nil {
+		t.Fatalf("Failed to add latency toxic: %v", err)
+	}
+
+	_, err = proxy.AddToxic("timeout", "timeout", "downstream", 0.9, map[string]interface{}{
+		"timeout": 500, // 500ms timeout (shorter than the latency) to force consistent failures
+	})
+	if err != nil {
+		t.Fatalf("Failed to add timeout toxic: %v", err)
+	}
+
+	proxyAddr := "http://127.0.0.1:8080"
+	restApi := Api(proxyAddr, 2)
+
+	totalReqs := 0
+	for i := 0; i < 3; i++ {
+		res, _ := restApi.Res().Get()
+		if res != nil && res.Headers != nil {
+			if trHeader := res.Headers.Get("X-Total-Retries"); trHeader != "" {
+				retryCount, parseErr := strconv.Atoi(trHeader)
+				if parseErr == nil {
+					totalReqs += retryCount
+				} else {
+					t.Fatalf("Header parse error: %s", parseErr)
+				}
+			}
+		}
+	}
+	assert.GreaterOrEqual(t, totalReqs, 2)
+	assert.LessOrEqual(t, totalReqs, 6)
 }

@@ -1,10 +1,13 @@
 module github.com/kovetskiy/gopencils
 
-go 1.20
+go 1.23.0
+
+toolchain go1.23.3
 
 require (
-	github.com/stretchr/testify v1.9.0
-	golang.org/x/oauth2 v0.22.0
+	github.com/Shopify/toxiproxy/v2 v2.12.0
+	github.com/stretchr/testify v1.10.0
+	golang.org/x/oauth2 v0.24.0
 )
 
 require (

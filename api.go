@@ -34,6 +34,7 @@ type ApiStruct struct {
 	Client     *http.Client
 	Cookies    *cookiejar.Jar
 	PathSuffix string
+	RetryCount int
 }
 
 // Create a new API Instance and returns a Resource
@@ -45,7 +46,7 @@ func Api(baseUrl string, options ...interface{}) *Resource {
 		panic("Api() - url.Parse(baseUrl) Error:" + err.Error())
 	}
 
-	apiInstance := &ApiStruct{BaseUrl: u, BasicAuth: nil}
+	apiInstance := &ApiStruct{BaseUrl: u, BasicAuth: nil, RetryCount: 0}
 
 	for _, o := range options {
 		switch v := o.(type) {
@@ -55,6 +56,8 @@ func Api(baseUrl string, options ...interface{}) *Resource {
 			apiInstance.Client = v
 		case string:
 			apiInstance.PathSuffix = v
+		case int:
+			apiInstance.RetryCount = v
 		}
 	}
 

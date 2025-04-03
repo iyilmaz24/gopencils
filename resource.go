@@ -20,10 +20,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 var ErrCantUseAsQuery = errors.New("can't use options[0] as Query")
@@ -231,9 +233,44 @@ func (r *Resource) do(method string) (*Resource, error) {
 		}
 	}
 
+	var requestBody []byte
+	if req.Body != nil {
+		// *http.Client.Do(req) will close the req.Body and not allow subsequent reads
+		// we must save the body and reuse it manually for retrial logic
+		requestBody, _ = io.ReadAll(req.Body)
+		req.Body.Close()
+
+		req.Body = io.NopCloser(bytes.NewReader(requestBody)) // restore req.Body after reading + saving it above
+		req.ContentLength = int64(len(requestBody))
+	}
+	if r.Headers == nil {
+		r.Headers = make(http.Header)
+	}
+	r.Headers.Set("X-Total-Retries", strconv.Itoa(0))
+
 	resp, err := r.Api.Client.Do(req)
+	totalRetries := 0
+
 	if err != nil {
-		return r, err
+		for i := 0; i < r.Api.RetryCount; i++ {
+			if i > 0 {
+				time.Sleep(time.Duration(math.Pow(2, float64(i))) * time.Second) // exponential backoff - in case requested resource is busy
+			}
+			if len(requestBody) > 0 {
+				req.Body = io.NopCloser(bytes.NewReader(requestBody))
+				req.ContentLength = int64(len(requestBody))
+			}
+			resp, err = r.Api.Client.Do(req)
+			totalRetries++
+			
+			if err == nil && (resp == nil || resp.StatusCode < 500) {
+				break
+			}
+		}
+		r.Headers.Set("X-Total-Retries", strconv.Itoa(totalRetries))
+		if err != nil {
+			return r, err
+		}
 	}
 
 	r.Raw = resp
@@ -248,7 +285,7 @@ func (r *Resource) do(method string) (*Resource, error) {
 			r.Logger.Printf("%s", string(dump))
 		}
 	}
-
+	
 	if resp.StatusCode >= 400 {
 		return r, nil
 	}
@@ -279,7 +316,7 @@ func (r *Resource) SetPayload(args interface{}) io.Reader {
 
 // Sets Headers
 func (r *Resource) SetHeader(key string, value string) {
-	r.Headers.Add(key, value)
+    r.Headers.Add(key, value)
 }
 
 // Overwrites the client that will be used for requests.
