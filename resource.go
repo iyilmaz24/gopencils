@@ -287,6 +287,11 @@ func (r *Resource) do(method string) (*Resource, error) {
 	}
 	
 	if resp.StatusCode >= 400 {
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return r, err
+		}
+		r.Raw.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // replace body with ReadCloser that can be read again
 		return r, nil
 	}
 
